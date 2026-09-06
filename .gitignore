@@ -32,8 +32,22 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# Environment files can contain local credentials and must never be committed.
+# Commit example templates only; Expo public variables are still bundled into
+# the client and must not contain secrets.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local editor settings
+.vscode/
+.idea/
+
+# Logs and test output
+*.log
+coverage/
+.eslintcache
 
 # typescript
 *.tsbuildinfo
