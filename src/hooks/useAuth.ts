@@ -3,7 +3,6 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useCallback, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import { useAuthStore } from '../store/useAuthStore';
-import type { UserRole } from '../types';
 
 interface BiometricInfo {
   isAvailable: boolean;
@@ -139,16 +138,20 @@ export function useAuth() {
   }, [hasBiometricSession, isBiometricEnabled, updateBiometricPreference]);
 
   const login = useCallback(
-    async (identifier: string, password: string, role: UserRole, remember = rememberMe) => {
+    async (identifier: string, password: string, remember = rememberMe) => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const success = await storeLogin(identifier, password, role, remember);
-        if (!success) {
-          setError('Use the demo credentials shown below, then try again.');
+        const result = await storeLogin(identifier, password, remember);
+        if (!result.ok) {
+          setError(
+            result.reason === 'locked'
+              ? `Too many attempts. Try again in ${result.retryAfterSeconds ?? 30} seconds.`
+              : 'Email or password is incorrect. Use one of the demo accounts shown below.',
+          );
         }
-        return success;
+        return result.ok;
       } catch {
         setError('Sign-in could not be completed. Please try again.');
         return false;

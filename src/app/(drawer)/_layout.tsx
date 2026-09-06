@@ -41,6 +41,14 @@ export default function DrawerShellLayout() {
         name="exam-card"
         options={{ headerShown: true, title: 'Examination Card' }}
       />
+      <Stack.Screen
+        name="access"
+        options={{ headerShown: true, title: 'My Access Center' }}
+      />
+      <Stack.Screen
+        name="access-denied"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

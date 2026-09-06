@@ -18,6 +18,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/useAuthStore';
+import { getModuleForSegments, hasModuleAccess } from '../auth/roles';
+import { colors } from '../theme';
 import '../global.css';
 
 // Create a single TanStack Query client instance
@@ -33,6 +35,9 @@ const queryClient = new QueryClient({
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(() => useAuthStore.persist.hasHydrated());
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
+  const sessionExpiresAt = useAuthStore((state) => state.sessionExpiresAt);
+  const expireSession = useAuthStore((state) => state.expireSession);
   const segments = useSegments();
   const router = useRouter();
 
@@ -49,11 +54,26 @@ export default function RootLayout() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isReady || !isAuthenticated) return undefined;
+
+    const validateSession = () => {
+      if (!useAuthStore.getState().isSessionValid()) {
+        void expireSession();
+      }
+    };
+
+    validateSession();
+    const timer = setInterval(validateSession, 30_000);
+    return () => clearInterval(timer);
+  }, [expireSession, isAuthenticated, isReady, sessionExpiresAt]);
+
   // Auth routing guard
   useEffect(() => {
     if (!isReady) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const isAccessDeniedRoute = segments.includes('access-denied' as never);
 
     if (!isAuthenticated && !inAuthGroup) {
       // Redirect to login if unauthenticated
@@ -61,13 +81,21 @@ export default function RootLayout() {
     } else if (isAuthenticated && inAuthGroup) {
       // Redirect to dashboard if logged in
       router.replace('/(drawer)/(tabs)');
+    } else if (isAuthenticated && user && !isAccessDeniedRoute) {
+      const requestedModule = getModuleForSegments([...segments] as string[]);
+      if (requestedModule && !hasModuleAccess(user.role, requestedModule)) {
+        router.replace({
+          pathname: '/(drawer)/access-denied',
+          params: { module: requestedModule },
+        } as never);
+      }
     }
-  }, [isAuthenticated, segments, isReady]);
+  }, [isAuthenticated, segments, isReady, router, user]);
 
   if (!isReady) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#002147', alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color="#FFAB00" />
+      <View style={{ flex: 1, backgroundColor: colors.primaryDark, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#FFFFFF" />
       </View>
     );
   }

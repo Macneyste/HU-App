@@ -1,102 +1,44 @@
-import React, { useState } from 'react';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
+  Image,
+  ImageBackground,
   KeyboardAvoidingView,
-  Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
-  type TextInputProps,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import {
-  ArrowRight,
-  BookOpenCheck,
-  BriefcaseBusiness,
+  AtSign,
   Check,
-  Eye,
-  EyeOff,
+  ChevronDown,
   Fingerprint,
-  GraduationCap,
   LockKeyhole,
-  Mail,
   ShieldCheck,
-  UserRound,
+  UsersRound,
+  X,
 } from 'lucide-react-native';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { DEMO_ROLE_ORDER, getRoleDefinition } from '../../auth/roles';
+import { HORMUUD_UNIVERSITY, HU_ASSETS } from '../../data/university';
 import { useAuth } from '../../hooks/useAuth';
 import { colors, radii, shadows, typeStyles } from '../../theme';
 import type { UserRole } from '../../types';
 
-const DEMO_ACCOUNTS = {
-  student: { identifier: 'HU-4982', password: 'password123' },
-  lecturer: { identifier: 'prof.abdi@hu.edu.so', password: 'password123' },
-} as const;
-
-interface LoginFieldProps extends TextInputProps {
-  label: string;
-  icon: React.ReactNode;
-  error?: string;
-  right?: React.ReactNode;
-}
-
-function LoginField({ label, icon, error, right, onFocus, onBlur, ...props }: LoginFieldProps) {
-  const [focused, setFocused] = useState(false);
-
-  return (
-    <View style={styles.fieldGroup}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View
-        style={[
-          styles.fieldShell,
-          focused && styles.fieldShellFocused,
-          error ? styles.fieldShellError : null,
-        ]}
-      >
-        <View pointerEvents="none" style={styles.fieldIcon}>
-          {icon}
-        </View>
-        <TextInput
-          {...props}
-          accessibilityLabel={props.accessibilityLabel ?? label}
-          onFocus={(event) => {
-            setFocused(true);
-            onFocus?.(event);
-          }}
-          onBlur={(event) => {
-            setFocused(false);
-            onBlur?.(event);
-          }}
-          placeholderTextColor={colors.textSoft}
-          selectionColor={colors.emerald}
-          style={styles.fieldInput}
-        />
-        {right}
-      </View>
-      {error ? (
-        <Text accessibilityLiveRegion="polite" style={styles.fieldError}>
-          {error}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
 export default function LoginScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const {
     authenticateWithBiometric,
     biometricInfo,
     clearError,
-    error: authError,
+    error,
     hasBiometricSession,
     isBiometricEnabled,
     isLoading,
@@ -104,652 +46,325 @@ export default function LoginScreen() {
     rememberMe,
     setRememberMe,
   } = useAuth();
+  const [selectedRole, setSelectedRole] = useState<UserRole>('student');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [roleModalVisible, setRoleModalVisible] = useState(false);
 
-  const [selectedRole, setSelectedRole] = useState<Extract<UserRole, 'student' | 'lecturer'>>(
-    'student',
-  );
-  const [identifier, setIdentifier] = useState<string>(DEMO_ACCOUNTS.student.identifier);
-  const [password, setPassword] = useState<string>(DEMO_ACCOUNTS.student.password);
-  const [passwordVisible, setPasswordVisible] = useState(false);
-  const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
+  const selectedDefinition = useMemo(() => getRoleDefinition(selectedRole), [selectedRole]);
 
-  const chooseRole = (role: Extract<UserRole, 'student' | 'lecturer'>) => {
-    const account = DEMO_ACCOUNTS[role];
+  const useDemoCredentials = (role = selectedRole) => {
+    const definition = getRoleDefinition(role);
     setSelectedRole(role);
-    setIdentifier(account.identifier);
-    setPassword(account.password);
-    setErrors({});
+    setEmail(definition.demoEmail);
+    setPassword(definition.demoPassword);
+    setEmailError(null);
+    setPasswordError(null);
     clearError();
-  };
-
-  const useDemoCredentials = () => {
-    const account = DEMO_ACCOUNTS[selectedRole];
-    setIdentifier(account.identifier);
-    setPassword(account.password);
-    setErrors({});
-    clearError();
-  };
-
-  const validate = () => {
-    const nextErrors: { identifier?: string; password?: string } = {};
-    const cleanIdentifier = identifier.trim();
-
-    if (!cleanIdentifier) {
-      nextErrors.identifier =
-        selectedRole === 'student' ? 'Enter the demo student ID.' : 'Enter the demo staff email.';
-    } else if (selectedRole === 'lecturer' && !/^\S+@\S+\.\S+$/.test(cleanIdentifier)) {
-      nextErrors.identifier = 'Enter a valid email address.';
-    }
-
-    if (!password) {
-      nextErrors.password = 'Enter the demo password.';
-    } else if (password.length < 6) {
-      nextErrors.password = 'Password must contain at least 6 characters.';
-    }
-
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
   };
 
   const handleLogin = async () => {
-    if (isLoading || !validate()) return;
+    const normalizedEmail = email.trim().toLowerCase();
+    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+    const validPassword = password.length >= 10;
+    setEmailError(validEmail ? null : 'Enter a valid account email.');
+    setPasswordError(validPassword ? null : 'Password must contain at least 10 characters.');
+    clearError();
+    if (!validEmail || !validPassword) return;
 
-    const success = await login(identifier, password, selectedRole, rememberMe);
-    if (success) router.replace('/(drawer)/(tabs)');
-  };
-
-  const handleBiometricLogin = async () => {
-    if (isLoading) return;
-    const success = await authenticateWithBiometric();
-    if (success) router.replace('/(drawer)/(tabs)');
-  };
-
-  const openLink = async (url: string, fallbackMessage: string) => {
-    try {
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert('Unable to open link', fallbackMessage);
+    const authenticated = await login(normalizedEmail, password, rememberMe);
+    if (authenticated) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      router.replace('/(drawer)/(tabs)');
+    } else {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
     }
   };
 
-  const emailSupport = () =>
-    void openLink(
-      'mailto:support@hu.edu.so?subject=HU%20Campus%20Portal%20access%20help',
-      'Email support@hu.edu.so from your preferred mail app.',
-    );
-
-  const openPortal = () =>
-    void openLink(
-      'https://portal.hu.edu.so',
-      'Open https://portal.hu.edu.so in your browser.',
-    );
-
-  const handleForgotPassword = () => {
-    Alert.alert(
-      'Account access help',
-      'This preview uses demo credentials. For a real university account, contact the HU ICT support desk.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Email ICT', onPress: emailSupport },
-        { text: 'Open portal', onPress: openPortal },
-      ],
-    );
+  const handleBiometricLogin = async () => {
+    const authenticated = await authenticateWithBiometric();
+    if (authenticated) router.replace('/(drawer)/(tabs)');
   };
 
-  const canUseBiometricLogin =
-    biometricInfo.isAvailable && isBiometricEnabled && hasBiometricSession;
-
   return (
-    <LinearGradient
-      colors={[colors.navyDark, colors.navy, colors.navyLight]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.screen}
-    >
-      <StatusBar barStyle="light-content" backgroundColor={colors.navyDark} />
-      <View pointerEvents="none" style={styles.backgroundGlowTop} />
-      <View pointerEvents="none" style={styles.backgroundGlowBottom} />
-
+    <View style={styles.screen}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primaryDark} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.screen}
+        style={styles.flex}
       >
         <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingTop: Math.max(insets.top + 18, 38),
-              paddingBottom: Math.max(insets.bottom + 22, 34),
-            },
-          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
         >
-          <View style={styles.brandBlock}>
-            <View style={styles.brandMark}>
-              <BookOpenCheck size={29} color={colors.gold} strokeWidth={2.3} />
-            </View>
-            <View style={styles.brandCopy}>
-              <Text style={styles.brandEyebrow}>HORMUUD UNIVERSITY</Text>
-              <Text style={styles.brandTitle}>Campus Portal</Text>
-              <Text style={styles.brandSubtitle}>Academic life, clearly organized.</Text>
-            </View>
-          </View>
-
-          <View style={styles.loginCard}>
-            <View style={styles.cardHeadingRow}>
-              <View style={styles.cardHeadingCopy}>
-                <Text style={styles.welcomeTitle}>Welcome back</Text>
-                <Text style={styles.welcomeSubtitle}>Choose your role and continue securely.</Text>
+          <ImageBackground source={HU_ASSETS.campus} style={styles.hero} imageStyle={styles.heroImage}>
+            <View style={styles.heroOverlay} />
+            <View style={styles.brandRow}>
+              <View style={styles.logoShell}>
+                <Image source={HU_ASSETS.logo} resizeMode="contain" style={styles.logo} />
               </View>
-              <View style={styles.secureBadge}>
-                <ShieldCheck size={15} color={colors.emerald} />
-                <Text style={styles.secureBadgeText}>SECURE</Text>
+              <View style={styles.brandCopy}>
+                <Text style={styles.brandName}>{HORMUUD_UNIVERSITY.name}</Text>
+                <Text style={styles.brandTagline}>{HORMUUD_UNIVERSITY.tagline}</Text>
               </View>
             </View>
-
-            <View accessibilityRole="tablist" style={styles.roleSelector}>
-              <Pressable
-                accessibilityLabel="Sign in as a student"
-                accessibilityRole="tab"
-                accessibilityState={{ selected: selectedRole === 'student' }}
-                onPress={() => chooseRole('student')}
-                style={({ pressed }) => [
-                  styles.roleButton,
-                  selectedRole === 'student' && styles.roleButtonSelected,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <GraduationCap
-                  size={18}
-                  color={selectedRole === 'student' ? '#FFFFFF' : colors.textMuted}
-                />
-                <Text
-                  style={[
-                    styles.roleButtonText,
-                    selectedRole === 'student' && styles.roleButtonTextSelected,
-                  ]}
-                >
-                  Student
-                </Text>
-              </Pressable>
-
-              <Pressable
-                accessibilityLabel="Sign in as a lecturer"
-                accessibilityRole="tab"
-                accessibilityState={{ selected: selectedRole === 'lecturer' }}
-                onPress={() => chooseRole('lecturer')}
-                style={({ pressed }) => [
-                  styles.roleButton,
-                  selectedRole === 'lecturer' && styles.roleButtonSelected,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <BriefcaseBusiness
-                  size={17}
-                  color={selectedRole === 'lecturer' ? '#FFFFFF' : colors.textMuted}
-                />
-                <Text
-                  style={[
-                    styles.roleButtonText,
-                    selectedRole === 'lecturer' && styles.roleButtonTextSelected,
-                  ]}
-                >
-                  Lecturer
-                </Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.demoNotice}>
-              <View style={styles.demoNoticeIcon}>
-                <ShieldCheck size={16} color={colors.info} />
-              </View>
-              <View style={styles.demoNoticeCopy}>
-                <Text style={styles.demoNoticeTitle}>Preview environment</Text>
-                <Text style={styles.demoNoticeText}>
-                  Sample campus data only. No request is sent to a live HU server.
-                </Text>
-              </View>
-              <Pressable
-                accessibilityLabel={`Fill ${selectedRole} demo credentials`}
-                accessibilityRole="button"
-                hitSlop={8}
-                onPress={useDemoCredentials}
-                style={({ pressed }) => [styles.demoFillButton, pressed && styles.pressed]}
-              >
-                <Text style={styles.demoFillText}>Fill demo</Text>
-              </Pressable>
-            </View>
-
-            <LoginField
-              autoCapitalize={selectedRole === 'student' ? 'characters' : 'none'}
-              autoComplete="username"
-              autoCorrect={false}
-              error={errors.identifier}
-              icon={<UserRound size={18} color={colors.navy} />}
-              keyboardType={selectedRole === 'student' ? 'default' : 'email-address'}
-              label={selectedRole === 'student' ? 'Student ID' : 'University email'}
-              onChangeText={(value) => {
-                setIdentifier(value);
-                if (errors.identifier) setErrors((current) => ({ ...current, identifier: undefined }));
-                clearError();
-              }}
-              placeholder={selectedRole === 'student' ? 'HU-4982' : 'name@hu.edu.so'}
-              returnKeyType="next"
-              value={identifier}
-            />
-
-            <LoginField
-              autoCapitalize="none"
-              autoComplete="current-password"
-              error={errors.password}
-              icon={<LockKeyhole size={18} color={colors.navy} />}
-              label="Password"
-              onChangeText={(value) => {
-                setPassword(value);
-                if (errors.password) setErrors((current) => ({ ...current, password: undefined }));
-                clearError();
-              }}
-              onSubmitEditing={() => void handleLogin()}
-              placeholder="Enter your password"
-              returnKeyType="go"
-              right={
-                <Pressable
-                  accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
-                  accessibilityRole="button"
-                  hitSlop={10}
-                  onPress={() => setPasswordVisible((visible) => !visible)}
-                  style={({ pressed }) => [styles.visibilityButton, pressed && styles.pressed]}
-                >
-                  {passwordVisible ? (
-                    <EyeOff size={19} color={colors.textMuted} />
-                  ) : (
-                    <Eye size={19} color={colors.textMuted} />
-                  )}
-                </Pressable>
-              }
-              secureTextEntry={!passwordVisible}
-              value={password}
-            />
-
-            <View style={styles.preferenceRow}>
-              <Pressable
-                accessibilityLabel="Remember me on this device"
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: rememberMe }}
-                onPress={() => setRememberMe(!rememberMe)}
-                style={({ pressed }) => [styles.rememberButton, pressed && styles.pressed]}
-              >
-                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                  {rememberMe ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
-                </View>
-                <View>
-                  <Text style={styles.rememberTitle}>Remember me</Text>
-                  <Text style={styles.rememberCaption}>Keep this demo session signed in</Text>
-                </View>
-              </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                hitSlop={8}
-                onPress={handleForgotPassword}
-                style={({ pressed }) => pressed && styles.pressed}
-              >
-                <Text style={styles.forgotText}>Need help?</Text>
-              </Pressable>
-            </View>
-
-            {authError ? (
-              <View accessibilityLiveRegion="polite" style={styles.authErrorBox}>
-                <Text style={styles.authErrorText}>{authError}</Text>
-              </View>
-            ) : null}
-
-            <Pressable
-              accessibilityLabel="Sign in to HU Campus Portal"
-              accessibilityRole="button"
-              accessibilityState={{ busy: isLoading, disabled: isLoading }}
-              disabled={isLoading}
-              onPress={() => void handleLogin()}
-              style={({ pressed }) => [
-                styles.signInButton,
-                pressed && !isLoading && styles.signInButtonPressed,
-                isLoading && styles.disabled,
-              ]}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <>
-                  <Text style={styles.signInButtonText}>Sign in to portal</Text>
-                  <ArrowRight size={18} color="#FFFFFF" />
-                </>
-              )}
-            </Pressable>
-
-            {canUseBiometricLogin ? (
-              <>
-                <View style={styles.dividerRow}>
-                  <View style={styles.divider} />
-                  <Text style={styles.dividerLabel}>OR</Text>
-                  <View style={styles.divider} />
-                </View>
-                <Pressable
-                  accessibilityLabel={`Sign in with ${biometricInfo.biometricType}`}
-                  accessibilityRole="button"
-                  disabled={isLoading}
-                  onPress={() => void handleBiometricLogin()}
-                  style={({ pressed }) => [
-                    styles.biometricButton,
-                    pressed && styles.biometricButtonPressed,
-                    isLoading && styles.disabled,
-                  ]}
-                >
-                  <Fingerprint size={20} color={colors.emerald} />
-                  <Text style={styles.biometricButtonText}>
-                    Continue with {biometricInfo.biometricType}
-                  </Text>
-                </Pressable>
-              </>
-            ) : null}
-
-            <View style={styles.demoCredentials}>
-              <Text style={styles.demoCredentialsLabel}>DEMO ACCESS</Text>
-              <Text selectable style={styles.demoCredentialsText}>
-                {selectedRole === 'student' ? 'HU-4982' : 'prof.abdi@hu.edu.so'} · password123
+            <View style={styles.heroCopy}>
+              <Text style={styles.kicker}>SECURE CAMPUS PORTAL</Text>
+              <Text style={styles.heroTitle}>One university. Your role. The right access.</Text>
+              <Text style={styles.heroSubtitle}>
+                Academic and administrative services, protected by role-based access.
               </Text>
             </View>
-          </View>
+          </ImageBackground>
 
-          <View style={styles.supportRow}>
+          <View style={styles.formSection}>
+            <View style={styles.formHeading}>
+              <Text style={styles.formTitle}>Sign in to HU</Text>
+              <Text style={styles.formSubtitle}>Choose a demo role, then use its portal credentials.</Text>
+            </View>
+
+            <Text style={styles.fieldLabel}>Portal role</Text>
             <Pressable
-              accessibilityLabel="Email HU ICT support"
-              accessibilityRole="link"
-              onPress={emailSupport}
-              style={({ pressed }) => [styles.supportLink, pressed && styles.supportLinkPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={`Selected role: ${selectedDefinition.label}`}
+              onPress={() => setRoleModalVisible(true)}
+              style={({ pressed }) => [styles.roleSelector, pressed && styles.pressed]}
             >
-              <Mail size={14} color="rgba(255,255,255,0.82)" />
-              <Text style={styles.supportLinkText}>support@hu.edu.so</Text>
+              <View style={styles.roleIcon}>
+                <UsersRound size={21} color={colors.primary} />
+              </View>
+              <View style={styles.roleCopy}>
+                <Text style={styles.roleLabel}>{selectedDefinition.label}</Text>
+                <Text style={styles.roleDepartment} numberOfLines={1}>{selectedDefinition.department}</Text>
+              </View>
+              <ChevronDown size={20} color={colors.textMuted} />
             </Pressable>
-            <View style={styles.supportDot} />
+
+            <View style={styles.demoCard}>
+              <View style={styles.demoHeader}>
+                <View style={styles.demoBadge}>
+                  <ShieldCheck size={14} color={colors.primaryDark} />
+                  <Text style={styles.demoBadgeText}>DEMO ONLY</Text>
+                </View>
+                <Pressable onPress={() => useDemoCredentials()} style={styles.fillButton}>
+                  <Text style={styles.fillButtonText}>Use credentials</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.credentialLine}>{selectedDefinition.demoEmail}</Text>
+              <Text style={styles.credentialLine}>{selectedDefinition.demoPassword}</Text>
+              <Text style={styles.demoNote}>These credentials do not represent a real HU account.</Text>
+            </View>
+
+            <Input
+              label="Email address"
+              value={email}
+              onChangeText={(value) => {
+                setEmail(value);
+                setEmailError(null);
+                clearError();
+              }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="username"
+              placeholder="name@demo.hu.edu.so"
+              error={emailError ?? undefined}
+              leftIcon={<AtSign size={19} color={colors.textMuted} />}
+            />
+            <Input
+              label="Password"
+              value={password}
+              onChangeText={(value) => {
+                setPassword(value);
+                setPasswordError(null);
+                clearError();
+              }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="password"
+              placeholder="Enter your password"
+              error={passwordError ?? undefined}
+              isPassword
+              leftIcon={<LockKeyhole size={19} color={colors.textMuted} />}
+              onSubmitEditing={() => void handleLogin()}
+            />
+
+            {error ? (
+              <View accessibilityRole="alert" style={styles.errorBanner}>
+                <LockKeyhole size={17} color={colors.danger} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
             <Pressable
-              accessibilityLabel="Open the HU web portal"
-              accessibilityRole="link"
-              onPress={openPortal}
-              style={({ pressed }) => [styles.supportLink, pressed && styles.supportLinkPressed]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: rememberMe }}
+              onPress={() => setRememberMe(!rememberMe)}
+              style={styles.rememberRow}
             >
-              <Text style={styles.supportLinkText}>portal.hu.edu.so</Text>
+              <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                {rememberMe ? <Check size={15} color="#FFFFFF" strokeWidth={3} /> : null}
+              </View>
+              <View style={styles.rememberCopy}>
+                <Text style={styles.rememberTitle}>Remember this device</Text>
+                <Text style={styles.rememberHint}>Session expires automatically after 8 hours.</Text>
+              </View>
             </Pressable>
+
+            <Button title="Secure sign in" onPress={handleLogin} loading={isLoading} fullWidth size="lg" />
+
+            {isBiometricEnabled && hasBiometricSession && biometricInfo.isAvailable ? (
+              <Button
+                title={`Continue with ${biometricInfo.biometricType}`}
+                onPress={handleBiometricLogin}
+                disabled={isLoading}
+                variant="outline"
+                fullWidth
+                icon={<Fingerprint size={20} color={colors.primary} />}
+                style={styles.biometricButton}
+              />
+            ) : null}
+
+            <View style={styles.securityNotice}>
+              <ShieldCheck size={18} color={colors.secondary} />
+              <Text style={styles.securityText}>
+                Five failed attempts trigger a temporary lock. Roles are assigned by the account—not by this selector.
+              </Text>
+            </View>
+
+            <Text style={styles.footerText}>
+              {HORMUUD_UNIVERSITY.address} · {HORMUUD_UNIVERSITY.phone}
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </LinearGradient>
+
+      <Modal
+        animationType="slide"
+        transparent
+        visible={roleModalVisible}
+        onRequestClose={() => setRoleModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Choose a portal role</Text>
+                <Text style={styles.modalSubtitle}>13 permission profiles are available in this demo.</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close role selector"
+                onPress={() => setRoleModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <X size={20} color={colors.text} />
+              </Pressable>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.roleList}>
+              {DEMO_ROLE_ORDER.map((role) => {
+                const definition = getRoleDefinition(role);
+                const selected = role === selectedRole;
+                return (
+                  <Pressable
+                    key={role}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => {
+                      useDemoCredentials(role);
+                      setRoleModalVisible(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.roleOption,
+                      selected && styles.roleOptionSelected,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={[styles.optionIndex, selected && styles.optionIndexSelected]}>
+                      <Text style={[styles.optionIndexText, selected && styles.optionIndexTextSelected]}>
+                        {String(DEMO_ROLE_ORDER.indexOf(role) + 1).padStart(2, '0')}
+                      </Text>
+                    </View>
+                    <View style={styles.roleCopy}>
+                      <Text style={styles.roleLabel}>{definition.label}</Text>
+                      <Text style={styles.roleDepartment} numberOfLines={1}>{definition.demoEmail}</Text>
+                    </View>
+                    {selected ? <Check size={19} color={colors.primary} /> : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  backgroundGlowTop: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    right: -110,
-    top: -95,
-    backgroundColor: 'rgba(244,183,64,0.11)',
-  },
-  backgroundGlowBottom: {
-    position: 'absolute',
-    width: 310,
-    height: 310,
-    borderRadius: 155,
-    left: -180,
-    bottom: -185,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  brandBlock: {
-    width: '100%',
-    maxWidth: 520,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 22,
-    paddingHorizontal: 3,
-  },
-  brandMark: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.17)',
-    marginRight: 14,
-  },
-  brandCopy: { flex: 1 },
-  brandEyebrow: {
-    ...typeStyles.eyebrow,
-    color: colors.gold,
-    marginBottom: 2,
-  },
-  brandTitle: {
-    fontSize: 25,
-    lineHeight: 30,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-    color: '#FFFFFF',
-  },
-  brandSubtitle: {
-    ...typeStyles.caption,
-    color: 'rgba(255,255,255,0.66)',
-    marginTop: 2,
-  },
-  loginCard: {
-    width: '100%',
-    maxWidth: 520,
-    padding: 20,
-    borderRadius: 28,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.75)',
-    ...shadows.floating,
-  },
-  cardHeadingRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-  },
-  cardHeadingCopy: { flex: 1, paddingRight: 12 },
-  welcomeTitle: { ...typeStyles.title, color: colors.text },
-  welcomeSubtitle: { ...typeStyles.body, color: colors.textMuted, marginTop: 3 },
-  secureBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-    backgroundColor: '#E9F8F2',
-  },
-  secureBadgeText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.7, color: colors.emerald },
-  roleSelector: {
-    flexDirection: 'row',
-    gap: 6,
-    padding: 5,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 14,
-  },
-  roleButton: {
-    flex: 1,
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    borderRadius: radii.md,
-  },
-  roleButtonSelected: { backgroundColor: colors.navy },
-  roleButtonText: { fontSize: 13, fontWeight: '800', color: colors.textMuted },
-  roleButtonTextSelected: { color: '#FFFFFF' },
-  demoNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 11,
-    borderRadius: radii.md,
-    backgroundColor: '#F0F8FF',
-    borderWidth: 1,
-    borderColor: '#CFE8F8',
-    marginBottom: 17,
-  },
-  demoNoticeIcon: {
-    width: 31,
-    height: 31,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    marginRight: 9,
-  },
-  demoNoticeCopy: { flex: 1, paddingRight: 6 },
-  demoNoticeTitle: { fontSize: 11, fontWeight: '900', color: colors.info },
-  demoNoticeText: { fontSize: 10.5, lineHeight: 14, fontWeight: '500', color: colors.textMuted, marginTop: 1 },
-  demoFillButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 7 },
-  demoFillText: { fontSize: 11, fontWeight: '900', color: colors.navy },
-  fieldGroup: { marginBottom: 14 },
-  fieldLabel: { fontSize: 12, fontWeight: '800', color: colors.text, marginBottom: 7 },
-  fieldShell: {
-    minHeight: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.25,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceMuted,
-  },
-  fieldShellFocused: {
-    borderColor: colors.emerald,
-    backgroundColor: '#FFFFFF',
-    shadowColor: colors.emerald,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.09,
-    shadowRadius: 8,
-    elevation: 1,
-  },
-  fieldShellError: { borderColor: '#FCA5A5', backgroundColor: '#FFF9F9' },
-  fieldIcon: { width: 45, alignItems: 'center', justifyContent: 'center' },
-  fieldInput: {
-    flex: 1,
-    minHeight: 50,
-    paddingVertical: 12,
-    paddingRight: 10,
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  visibilityButton: {
-    width: 45,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fieldError: { fontSize: 11, lineHeight: 15, fontWeight: '600', color: colors.danger, marginTop: 5, marginLeft: 3 },
-  preferenceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 15,
-  },
-  rememberButton: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center' },
-  checkbox: {
-    width: 21,
-    height: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 7,
-    borderWidth: 1.5,
-    borderColor: '#B7C3D0',
-    backgroundColor: '#FFFFFF',
-    marginRight: 9,
-  },
-  checkboxChecked: { borderColor: colors.emerald, backgroundColor: colors.emerald },
-  rememberTitle: { fontSize: 12, fontWeight: '800', color: colors.text },
-  rememberCaption: { fontSize: 9.5, fontWeight: '500', color: colors.textMuted, marginTop: 1 },
-  forgotText: { fontSize: 12, fontWeight: '800', color: colors.emerald },
-  authErrorBox: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: radii.sm,
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    marginBottom: 12,
-  },
-  authErrorText: { fontSize: 11.5, lineHeight: 16, fontWeight: '600', color: colors.danger },
-  signInButton: {
-    minHeight: 54,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 9,
-    borderRadius: radii.md,
-    backgroundColor: colors.emerald,
-    shadowColor: colors.emeraldDark,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  signInButtonPressed: { backgroundColor: colors.emeraldDark, transform: [{ scale: 0.992 }] },
-  signInButtonText: { fontSize: 15, fontWeight: '900', letterSpacing: 0.15, color: '#FFFFFF' },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 14 },
-  divider: { flex: 1, height: 1, backgroundColor: colors.border },
-  dividerLabel: { fontSize: 9, fontWeight: '900', color: colors.textSoft },
-  biometricButton: {
-    minHeight: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 9,
-    borderWidth: 1.25,
-    borderColor: '#B9DFD1',
-    borderRadius: radii.md,
-    backgroundColor: '#F3FBF8',
-  },
-  biometricButtonPressed: { backgroundColor: '#E8F7F1' },
-  biometricButtonText: { fontSize: 13, fontWeight: '800', color: colors.emeraldDark },
-  demoCredentials: {
-    alignItems: 'center',
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  demoCredentialsLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 1, color: colors.textSoft },
-  demoCredentialsText: { fontSize: 11.5, fontWeight: '700', color: colors.textMuted, marginTop: 3 },
-  supportRow: {
-    width: '100%',
-    maxWidth: 520,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-    marginTop: 18,
-  },
-  supportLink: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 7 },
-  supportLinkPressed: { opacity: 0.55 },
-  supportLinkText: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.82)' },
-  supportDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.28)' },
-  pressed: { opacity: 0.62 },
-  disabled: { opacity: 0.58 },
+  flex: { flex: 1 },
+  screen: { flex: 1, backgroundColor: colors.background },
+  scrollContent: { flexGrow: 1 },
+  hero: { minHeight: 330, justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 52, paddingBottom: 32 },
+  heroImage: { resizeMode: 'cover' },
+  heroOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(8, 42, 27, 0.76)' },
+  brandRow: { flexDirection: 'row', alignItems: 'center' },
+  logoShell: { width: 62, height: 72, borderRadius: 14, backgroundColor: '#FFFFFF', padding: 5, ...shadows.card },
+  logo: { width: '100%', height: '100%' },
+  brandCopy: { flex: 1, marginLeft: 13 },
+  brandName: { color: '#FFFFFF', fontSize: 17, fontWeight: '800', letterSpacing: 0.2 },
+  brandTagline: { color: 'rgba(255,255,255,0.78)', fontSize: 12, fontWeight: '600', marginTop: 3 },
+  heroCopy: { maxWidth: 420 },
+  kicker: { ...typeStyles.eyebrow, color: '#86D5B2', marginBottom: 9 },
+  heroTitle: { color: '#FFFFFF', fontSize: 34, lineHeight: 38, fontWeight: '800', letterSpacing: -1 },
+  heroSubtitle: { color: 'rgba(255,255,255,0.76)', fontSize: 14, lineHeight: 20, marginTop: 10 },
+  formSection: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 28, paddingBottom: 38 },
+  formHeading: { marginBottom: 22 },
+  formTitle: { color: colors.text, fontSize: 26, fontWeight: '800', letterSpacing: -0.6 },
+  formSubtitle: { color: colors.textMuted, fontSize: 14, lineHeight: 20, marginTop: 5 },
+  fieldLabel: { ...typeStyles.caption, color: colors.text, fontWeight: '700', marginBottom: 7 },
+  roleSelector: { minHeight: 62, flexDirection: 'row', alignItems: 'center', borderWidth: 1.25, borderColor: colors.border, borderRadius: radii.md, backgroundColor: colors.surface, paddingHorizontal: 13, marginBottom: 12 },
+  roleIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
+  roleCopy: { flex: 1, minWidth: 0 },
+  roleLabel: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  roleDepartment: { color: colors.textMuted, fontSize: 11, marginTop: 3 },
+  demoCard: { borderRadius: radii.md, borderWidth: 1, borderColor: '#BFDCCF', backgroundColor: colors.primarySoft, padding: 13, marginBottom: 20 },
+  demoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  demoBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  demoBadgeText: { color: colors.primaryDark, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
+  fillButton: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: '#FFFFFF' },
+  fillButtonText: { color: colors.primaryDark, fontSize: 11, fontWeight: '800' },
+  credentialLine: { color: colors.text, fontSize: 12, fontWeight: '700', fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }) },
+  demoNote: { color: colors.textMuted, fontSize: 10, lineHeight: 14, marginTop: 7 },
+  errorBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 12, borderRadius: radii.md, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', marginBottom: 14 },
+  errorText: { flex: 1, color: colors.danger, fontSize: 12, lineHeight: 17, fontWeight: '600' },
+  rememberRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  checkbox: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
+  rememberCopy: { flex: 1 },
+  rememberTitle: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  rememberHint: { color: colors.textMuted, fontSize: 10, marginTop: 2 },
+  biometricButton: { marginTop: 10 },
+  securityNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 13, marginTop: 18, borderRadius: radii.md, backgroundColor: colors.secondarySoft },
+  securityText: { flex: 1, color: colors.textMuted, fontSize: 11, lineHeight: 16 },
+  footerText: { color: colors.textSoft, fontSize: 10, textAlign: 'center', marginTop: 24 },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(14,21,17,0.54)' },
+  modalSheet: { maxHeight: '82%', backgroundColor: colors.surface, borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingTop: 10, paddingHorizontal: 18, paddingBottom: 26 },
+  modalHandle: { width: 42, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center', marginBottom: 15 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  modalTitle: { color: colors.text, fontSize: 20, fontWeight: '800' },
+  modalSubtitle: { color: colors.textMuted, fontSize: 11, marginTop: 3 },
+  closeButton: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted },
+  roleList: { paddingBottom: 20 },
+  roleOption: { minHeight: 62, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, marginBottom: 8 },
+  roleOptionSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  optionIndex: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted, marginRight: 11 },
+  optionIndexSelected: { backgroundColor: colors.primary },
+  optionIndexText: { color: colors.textMuted, fontSize: 10, fontWeight: '800' },
+  optionIndexTextSelected: { color: '#FFFFFF' },
+  pressed: { opacity: 0.72 },
 });

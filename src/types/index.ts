@@ -8,20 +8,59 @@
 
 // ─── Authentication & User ────────────────────────────────────
 
-/** Supported user roles across the application */
-export type UserRole = 'student' | 'lecturer' | 'admin';
+/** Supported portal roles across the university. */
+export type UserRole =
+  | 'student'
+  | 'lecturer'
+  | 'registrar'
+  | 'finance'
+  | 'hr'
+  | 'public_relations'
+  | 'student_affairs'
+  | 'events'
+  | 'postgraduate'
+  | 'examinations'
+  | 'ict'
+  | 'research'
+  | 'admin';
+
+export type PortalModule =
+  | 'dashboard'
+  | 'schedule'
+  | 'finance'
+  | 'grades'
+  | 'exams'
+  | 'digitalId'
+  | 'library'
+  | 'news'
+  | 'admissions'
+  | 'studentRecords'
+  | 'staff'
+  | 'studentAffairs'
+  | 'events'
+  | 'postgraduate'
+  | 'ict'
+  | 'research'
+  | 'directory'
+  | 'accessControl'
+  | 'system';
+
+export type AccessLevel = 'view' | 'manage';
 
 /** Core user profile shared across all roles */
 export interface User {
   id: string;
-  studentId: string;           // e.g. "HU-4982"
+  accountId: string;
+  studentId: string;           // Empty for non-student roles.
   fullName: string;
   email: string;
   phone: string;
   avatar: string;              // URI to profile photo
   role: UserRole;
-  faculty: string;             // e.g. "Faculty of Computer Science"
-  program: string;             // e.g. "BSc. Computer Science"
+  department: string;
+  jobTitle: string;
+  faculty: string;
+  program: string;
   yearOfStudy: number;
   semester: number;
   enrollmentDate: string;      // ISO date string
@@ -36,13 +75,14 @@ export interface AuthState {
   isAuthenticated: boolean;
   isBiometricEnabled: boolean;
   rememberMe: boolean;
+  sessionExpiresAt: string | null;
+  lastAuthenticatedAt: string | null;
 }
 
 /** Login request payload */
 export interface LoginCredentials {
   identifier: string;          // Student ID or email
   password: string;
-  role: UserRole;
   rememberMe: boolean;
 }
 

@@ -25,12 +25,15 @@ import type {
 
 export const MOCK_USER: User = {
   id: 'usr_001',
+  accountId: 'HU-4982',
   studentId: 'HU-4982',
   fullName: 'Yonis Abdi',
   email: 'yonis.abdi@students.hu.edu.so',
   phone: '+252 61 234 5678',
   avatar: 'https://api.dicebear.com/7.x/notionists/png?seed=yonis&backgroundColor=c0aede',
   role: 'student',
+  department: 'Faculty of Computer Science & IT',
+  jobTitle: 'Student',
   faculty: 'Faculty of Computer Science',
   program: 'BSc. Computer Science',
   yearOfStudy: 3,
