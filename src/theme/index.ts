@@ -1,22 +1,29 @@
 import type { TextStyle, ViewStyle } from 'react-native';
 
 export const colors = {
-  navy: '#062B50',
-  navyDark: '#041E38',
-  navyLight: '#174B78',
-  emerald: '#087F5B',
-  emeraldDark: '#056047',
-  gold: '#F4B740',
-  background: '#F4F7FB',
+  primary: '#148154',
+  primaryDark: '#0F6843',
+  primarySoft: '#E8F3EE',
+  secondary: '#2C85B7',
+  secondaryDark: '#236E98',
+  secondarySoft: '#EAF4F9',
+  navy: '#148154',
+  navyDark: '#0F6843',
+  navyLight: '#2C85B7',
+  emerald: '#148154',
+  emeraldDark: '#0F6843',
+  gold: '#2C85B7',
+  background: '#F8FAF9',
   surface: '#FFFFFF',
-  surfaceMuted: '#F8FAFC',
-  text: '#102033',
-  textMuted: '#64748B',
-  textSoft: '#94A3B8',
-  border: '#E3EAF2',
+  surfaceMuted: '#F1F5F2',
+  text: '#202522',
+  textMuted: '#606862',
+  textSoft: '#8D9690',
+  border: '#D9E0DC',
+  borderStrong: '#C8D1CB',
   danger: '#DC2626',
-  warning: '#B45309',
-  info: '#0369A1',
+  warning: '#A15C00',
+  info: '#2C85B7',
 } as const;
 
 export const radii = {
@@ -29,14 +36,14 @@ export const radii = {
 
 export const shadows: Record<'card' | 'floating', ViewStyle> = {
   card: {
-    shadowColor: '#0F2742',
+    shadowColor: '#183123',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.07,
     shadowRadius: 12,
     elevation: 3,
   },
   floating: {
-    shadowColor: '#041E38',
+    shadowColor: '#183123',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.16,
     shadowRadius: 20,

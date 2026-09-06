@@ -1,20 +1,18 @@
 {
   "expo": {
-    "name": "HU-App",
-    "slug": "HU-App",
+    "name": "Hormuud University",
+    "slug": "hormuud-university-portal",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/brand/hu-logo.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#F8FAF9",
+        "foregroundImage": "./assets/brand/hu-mark.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -32,7 +30,7 @@
       "typedRoutes": true
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/brand/hu-mark.png",
       "bundler": "metro"
     }
   }
